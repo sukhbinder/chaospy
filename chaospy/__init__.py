@@ -1,33 +1,54 @@
-R"""
-Uncertainty Quantifican Toolbox
-===============================
-
-This module contains tools for performing uncertainty
-quantification of models.
-
-Submodule
----------
-bertran         Multi-indexing tools using Bertran's notation
-cholesky        Collection of modified Cholesky rutines
-collocation     Tools for creating polynomial chaos expansion
-descriptives    Statistical descriptive tools
-dist            Collection of probability distribution
-orthogonal      Orthogonalization toolbox
-poly            General creation and manipulation of polynomials
-quadrature      Gaussian quadrature toolbox
-utils           Supporting function not fitting in anywhere else
 """
+Uncertainty Quantification Toolbox
+==================================
 
-__version__ = "1.0"
-__author__ = "Jonathan Feinberg, jonathan@feinberg.no"
+This module contains tools for performing uncertainty quantification of models.
+"""
+import logging
+import os
+import pkg_resources
 
-from cholesky import *
-from dist import *
-from utils import *
-from bertran import *
-from descriptives import *
-from orthogonal import *
-from poly import *
-from collocation import *
-from quadrature import *
-from saltelli import *
+from numpoly import *
+
+import chaospy.chol
+import chaospy.descriptives
+import chaospy.distributions
+import chaospy.orthogonal
+import chaospy.spectral
+import chaospy.quadrature
+import chaospy.saltelli
+import chaospy.regression
+
+# To be deprecated
+from .basis import basis
+from .prange import prange
+
+from chaospy.distributions import *
+from chaospy.orthogonal import *
+from chaospy.spectral import *
+from chaospy.quadrature import *
+from chaospy.saltelli import *
+from chaospy.descriptives import *
+from chaospy.regression import *
+from chaospy.external import *
+
+try:
+    __version__ = pkg_resources.get_distribution("chaospy").version
+except pkg_resources.DistributionNotFound:
+    __version__ = None
+
+
+def configure_logging():
+    """Configure logging for Chaospy."""
+    logpath = os.environ.get("CHAOSPY_LOGPATH", os.devnull)
+    logging.basicConfig(level=logging.DEBUG, filename=logpath, filemode="w")
+    streamer = logging.StreamHandler()
+    loglevel = logging.DEBUG if os.environ.get("CHAOSPY_DEBUG", "") else logging.WARNING
+    streamer.setLevel(loglevel)
+
+    logger = logging.getLogger("chaospy")
+    logger.addHandler(streamer)
+    logger = logging.getLogger("numpoly")
+    logger.addHandler(streamer)
+
+configure_logging()

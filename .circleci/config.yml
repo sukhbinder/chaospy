@@ -1,0 +1,109 @@
+version-tags: &version-tags
+  tags:
+    only: /v\d+\.\d+\.\d+/
+
+version: 2
+jobs:
+  test-py27:
+    docker:
+      - image: circleci/python:2.7.17
+    working_directory: /home/circleci/project
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+              - deps-py27-{{ checksum "pyproject.toml" }}
+              - deps-py27-
+      - run:
+          name: "Installation"
+          command: |
+            if [[ ! -d /home/circleci/venv ]]; then
+              virtualenv /home/circleci/venv
+            fi
+            source /home/circleci/venv/bin/activate
+            pip install -U numpoly functools32 scipy pytest openturns scikit-learn==0.20.1
+      - save_cache:
+          key: deps-py27-{{ checksum "pyproject.toml" }}
+          paths:
+              - /home/circleci/venv
+      - run:
+          name: "Run tests"
+          command: |
+              source /home/circleci/venv/bin/activate
+              pytest tests
+  test:
+    docker:
+      - image: circleci/python:3.8.3
+    working_directory: /home/circleci/project
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - deps-py38-{{ checksum "poetry.lock" }}
+            - deps-py38-
+      - run:
+          name: "Installation"
+          command: |
+            sudo apt install pandoc
+            if [[ ! -d /home/circleci/venv ]]; then
+              python3 -m venv /home/circleci/venv
+              /home/circleci/venv/bin/pip install poetry==1.0.9
+            fi
+            source /home/circleci/venv/bin/activate
+            poetry install
+      - save_cache:
+          key: deps-py38-{{ checksum "poetry.lock" }}
+          paths:
+            - /home/circleci/venv
+      - run:
+          name: "Ensure the documentation builds"
+          command: |
+            source /home/circleci/venv/bin/activate
+            sphinx-build docs/ docs/.build -b html -n -v --color -T -W
+      - run:
+          name: "Run pytest"
+          command: |
+            source /home/circleci/venv/bin/activate
+            coverage run --source=chaospy/ --module pytest --nbval --doctest-modules \
+                chaospy/ tests/ docs/*.rst docs/*/*.rst \
+                docs/tutorials/*.ipynb docs/tutorials/*/*.ipynb
+            bash <(curl -s https://codecov.io/bash)
+  deploy:
+    docker:
+      - image: circleci/python:3.8.3
+    working_directory: /home/circleci/project
+    steps:
+      - checkout
+      - run:
+          name: "Verify tag version"
+          command: |
+              PROJECT_TAG=$(cat pyproject.toml \
+                  | grep 'version\s*=' \
+                  | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+\(-[a-z0-9]\+\)\{0,1\}')
+              echo "$CIRCLE_TAG == v$PROJECT_TAG"
+              test "$CIRCLE_TAG" = "v$PROJECT_TAG"
+      - restore_cache:
+          keys:
+            - deps-py38-{{ checksum "poetry.lock" }}
+      - run:
+          name: "Publish to PyPI"
+          command: |
+              source /home/circleci/venv/bin/activate
+              poetry publish --build --username jonathf \
+                  --password $PYPI_PASSWORD --no-interaction
+
+workflows:
+  version: 2
+  workflow:
+    jobs:
+      - test-py27:
+          filters:
+            <<: *version-tags
+      - test:
+          filters:
+            <<: *version-tags
+      - deploy:
+          filters:
+            <<: *version-tags
+            branches:
+                ignore: /.*/
